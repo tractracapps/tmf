@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "db:create": "node scripts/create-database.js",
     "migrate": "node --import dotenv/config node_modules/node-pg-migrate/bin/node-pg-migrate.js up",
