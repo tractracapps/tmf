@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>YPiM Applications Admin</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f5f5f5; color: #141414; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: #666; margin-bottom: 24px; }
+  .toolbar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  button { background: #03B77B; color: #fff; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button:hover { background: #029566; }
+  button.secondary { background: #fff; color: #141414; border: 2px solid #141414; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; white-space: nowrap; }
+  th { background: #141414; color: #fff; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: none; }
+  .table-scroll { overflow-x: auto; }
+  #status { color: #666; margin-bottom: 16px; }
+  #gate { max-width: 360px; margin: 80px auto; text-align: center; }
+  #gate input { width: 100%; padding: 10px; margin: 12px 0; border: 2px solid #141414; border-radius: 6px; font-size: 15px; }
+  #gateError { color: #c0392b; margin-top: 8px; min-height: 18px; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="wrap">
+  <h1>YPiM Applications</h1>
+  <p class="sub">Enter the admin key to view submissions</p>
+  <input type="password" id="keyInput" placeholder="Admin key">
+  <button id="unlockBtn">Unlock</button>
+  <div id="gateError"></div>
+</div>
+
+<div id="app" class="wrap" style="display:none">
+  <h1>YPiM Applications</h1>
+  <p class="sub" id="count"></p>
+  <div class="toolbar">
+    <button id="refreshBtn">Refresh</button>
+    <button id="exportBtn" class="secondary">Export CSV</button>
+    <button id="lockBtn" class="secondary">Lock</button>
+  </div>
+  <div id="status"></div>
+  <div class="table-scroll">
+    <table id="table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Full Name</th><th>Email</th><th>Phone</th><th>Age</th><th>Gender</th>
+          <th>State</th><th>Interests</th><th>Leadership</th><th>Declaration</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const gate = document.getElementById('gate');
+const app = document.getElementById('app');
+const keyInput = document.getElementById('keyInput');
+const gateError = document.getElementById('gateError');
+const tbody = document.getElementById('tbody');
+const statusEl = document.getElementById('status');
+const countEl = document.getElementById('count');
+
+function getKey() { return sessionStorage.getItem('ypimAdminKey'); }
+function setKey(k) { sessionStorage.setItem('ypimAdminKey', k); }
+function clearKey() { sessionStorage.removeItem('ypimAdminKey'); }
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML;
+}
+
+function showApp() {
+  gate.style.display = 'none';
+  app.style.display = 'block';
+  loadSubmissions();
+}
+
+function showGate(msg) {
+  clearKey();
+  app.style.display = 'none';
+  gate.style.display = 'block';
+  gateError.textContent = msg || '';
+}
+
+async function loadSubmissions() {
+  statusEl.textContent = 'Loading...';
+  tbody.innerHTML = '';
+  try {
+    const res = await fetch('/api/admin/submissions', { headers: { 'x-admin-key': getKey() } });
+    if (res.status === 401) { showGate('Invalid admin key'); return; }
+    if (!res.ok) throw new Error('Failed to load (' + res.status + ')');
+    const { submissions } = await res.json();
+    countEl.textContent = submissions.length + ' submission' + (submissions.length === 1 ? '' : 's');
+    submissions.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + esc(new Date(s.created_at).toLocaleString()) + '</td>' +
+        '<td>' + esc(s.full_name) + '</td>' +
+        '<td>' + esc(s.email) + '</td>' +
+        '<td>' + esc(s.phone) + '</td>' +
+        '<td>' + esc(s.age_range) + '</td>' +
+        '<td>' + esc(s.gender) + '</td>' +
+        '<td>' + esc(s.state) + '</td>' +
+        '<td>' + esc((s.interests || []).join(', ')) + '</td>' +
+        '<td>' + esc(s.leadership) + '</td>' +
+        '<td>' + (s.declaration ? 'Yes' : 'No') + '</td>';
+      tbody.appendChild(tr);
+    });
+    statusEl.textContent = '';
+  } catch (err) {
+    statusEl.textContent = 'Could not load submissions: ' + err.message;
+  }
+}
+
+document.getElementById('unlockBtn').addEventListener('click', () => {
+  const k = keyInput.value.trim();
+  if (!k) return;
+  setKey(k);
+  showApp();
+});
+keyInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('unlockBtn').click(); });
+
+document.getElementById('refreshBtn').addEventListener('click', loadSubmissions);
+document.getElementById('lockBtn').addEventListener('click', () => showGate());
+
+document.getElementById('exportBtn').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/admin/export', { headers: { 'x-admin-key': getKey() } });
+    if (res.status === 401) { showGate('Invalid admin key'); return; }
+    if (!res.ok) throw new Error('Export failed (' + res.status + ')');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ypim-applications.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Export failed: ' + err.message);
+  }
+});
+
+if (getKey()) { showApp(); }
+</script>
+</body>
+</html>

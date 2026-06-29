@@ -1,2 +1,3 @@
 /apply  /Apply.html  200
+/admin  /admin.html  200
 /api/submit-apply  /.netlify/functions/submit-apply  200
